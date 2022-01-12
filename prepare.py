@@ -2,7 +2,7 @@
 Author: liziwei01
 Date: 2021-12-11 21:32:42
 LastEditors: liziwei01
-LastEditTime: 2021-12-12 02:58:01
+LastEditTime: 2022-01-13 04:53:26
 Description: file content
 '''
 import os
@@ -24,7 +24,7 @@ class DataOperations:
 
     def __init__(self, isTrain=True, scale=3, imageSize=33, stride=14, labelSize=21):
         self.__isTrain = isTrain
-        self.__scale = scale
+        self.Scale = scale
         self.__imageSize = imageSize
         self.__stride = stride
         self.__labelSize = labelSize
@@ -65,7 +65,7 @@ class DataOperations:
     def __getFullPath(self, fileName):
         return os.path.join(os.getcwd(), fileName)
     
-    def __getImagesPaths(self, dataset=TrainDataDir):
+    def GetImagesPaths(self, dataset=TrainDataDir):
         dataDir = self.__getFullPath(dataset)
         data = glob.glob(os.path.join(dataDir, "*.jpeg"))
         return data
@@ -73,39 +73,44 @@ class DataOperations:
     # def __getFolderContainedFileNames(self, dataset):
     #     return os.listdir(dataset)
 
-    def __getImageHeightWidth(self, img):
-        if len(img.shape) == 3:
-            h, w, _ = img.shape
+    def GetImageHeightWidth(self, imgArr):
+        if len(imgArr.shape) == 3:
+            h, w, _ = imgArr.shape
         else:
-            h, w = img.shape
+            h, w = imgArr.shape
         return h, w
     
-    def __getScaleDivisibleHeightWidth(self, img):
-        h, w = self.__getImageHeightWidth(img)
-        h = h - np.mod(h, self.__scale)
-        w = w - np.mod(w, self.__scale)
+    def GetScaleDivisibleHeightWidth(self, imgArr):
+        h, w = self.GetImageHeightWidth(imgArr)
+        h = h - np.mod(h, self.Scale)
+        w = w - np.mod(w, self.Scale)
         return h, w
 
-    def __cutImageToScaleDivisible(self, img):
-        h, w = self.__getScaleDivisibleHeightWidth(img)
-        if len(img.shape) == 3:
-            cuttedImage = img[0:h, 0:w, :]
+    def __cutImageToScaleDivisible(self, imgArr):
+        h, w = self.GetScaleDivisibleHeightWidth(imgArr)
+        if len(imgArr.shape) == 3:
+            cuttedImage = imgArr[0:h, 0:w, :]
         else:
-            cuttedImage = img[0:h, 0:w]
+            cuttedImage = imgArr[0:h, 0:w]
         return cuttedImage
 
     def __getCuttedImage(self,img):
         cuttedImage = self.__cutImageToScaleDivisible(img)
         return cuttedImage / 255.
 
-    def __getArrayedScaleDivisibleImage(self, img):
+    def __getScaleDivisibleImage(self, img):
         cuttedImage = self.__getCuttedImage(img)
         return Image.fromarray(cuttedImage)
 
+    # np to Image
+    def GetSmallSizeImage(self, imgArr):
+        h, w = self.GetScaleDivisibleHeightWidth(imgArr)
+        cuttedImage = self.__getScaleDivisibleImage(imgArr)
+        return cuttedImage.resize(( w//self.Scale, h//self.Scale), Image.BICUBIC)
+
     def __getLRImage(self, img):
-        h, w = self.__getScaleDivisibleHeightWidth(img)
-        cuttedImageArr = self.__getArrayedScaleDivisibleImage(img)
-        midImg = cuttedImageArr.resize(( w//self.__scale, h//self.__scale), Image.BICUBIC)
+        h, w = self.GetScaleDivisibleHeightWidth(img)
+        midImg = self.GetSmallSizeImage(img)
         lrImg = midImg.resize((w, h), Image.BICUBIC)
         return np.around(np.float64(lrImg), decimals=4)
 
@@ -113,8 +118,8 @@ class DataOperations:
         return np.around(self.__getCuttedImage(img), decimals=4)
 
     def __saveH5(self, arrData, arrLabel, fileName):
-        savePath = os.path.join(os.getcwd(), "h5", fileName.lower()+".h5")  #os.getcwd()为获取当前工作目录
-        with h5py.File(savePath, 'w') as hf:   #数据集的制作,图片大小不一样，不能转成h5，这里无效，可以在test时直接读取图片
+        savePath = os.path.join(os.getcwd(), "h5", fileName.lower()+".h5")
+        with h5py.File(savePath, 'w') as hf:
             hf.create_dataset('data', data=arrData)
             hf.create_dataset('label', data=arrLabel)
 
@@ -137,13 +142,13 @@ class DataOperations:
     def PrepareTrainingData(self):
         subInputSequence = []
         subLabelSequence = []
-        imagesPaths = self.__getImagesPaths(self.TrainDataDir)
+        imagesPaths = self.GetImagesPaths(self.TrainDataDir)
         # 遍历每张图片用于训练
         for i in range(len(imagesPaths)):
-            image = self.__readYChannel(imagesPaths[i])
-            label_= self.__getTargetCuttedImage(image)  # 原图需要切割以 fit scale
-            input_ = self.__getLRImage(image)           # 不光切割同时也降低了原图的分辨率
-            h, w = self.__getImageHeightWidth(input_)
+            imgArr = self.__readYChannel(imagesPaths[i])
+            label_= self.__getTargetCuttedImage(imgArr)  # 原图需要切割以 fit scale
+            input_ = self.__getLRImage(imgArr)           # 不光切割同时也降低了原图的分辨率
+            h, w = self.GetImageHeightWidth(input_)
             # 以self.Stride为步长进行取子图片操作
             for x in range(0, h-self.__imageSize+1, self.__stride):  
                 for y in range(0, w-self.__imageSize+1, self.__stride):
@@ -161,12 +166,12 @@ class DataOperations:
     def PrepareTestData(self):
         subInputSequence = []
         subLabelSequence = []
-        imagesPaths = self.__getImagesPaths(self.TestDataDir)
+        imagesPaths = self.GetImagesPaths(self.TestDataDir)
         for i in range(len(imagesPaths)):
             image = self.__readYChannel(imagesPaths[i])
             label_= self.__getTargetCuttedImage(image)  # 原图需要切割以 fit scale
             input_ = self.__getLRImage(image)           # 不光切割同时也降低了原图的分辨率
-            h, w = self.__getImageHeightWidth(input_)
+            h, w = self.GetImageHeightWidth(input_)
             
             self.__saveSampleImage(label_, "label_image")   #保存真图
             self.__saveSampleImage(input_, "input_image")   #保存输入图片
@@ -179,8 +184,25 @@ class DataOperations:
 
         self.__saveAsPreparedH5(subInputSequence, subLabelSequence, self.TestDataDir)
 
+def down():
+    DO = DataOperations()
+    imagesPaths = DO.GetImagesPaths(DO.TestDataDir)
+    for i in range(len(imagesPaths)):
+        img = Image.open(imagesPaths[i])
+        w, h = img.size
+        midImg = img.resize(( w//10, h//10), Image.BICUBIC)
+        # midImg.save(imagesPaths[i])
+        bicubicImage = midImg.resize((w, h), Image.BICUBIC)
+        bicubicImage.save(imagesPaths[i])
+
 
 if __name__ == "__main__":
-    DO = DataOperations(labelSize=12)
-    DO.PrepareTrainingData()
-    DO.PrepareTestData()
+    # DO = DataOperations()
+    # DO.PrepareTrainingData()
+    # DO.PrepareTestData()
+    # down()
+    DIMDO = DataOperations(imageSize=33, labelSize=27, stride=14)
+    DIMDO.PrepareTrainingData()
+    DIMDO.PrepareTestData()
+    
+
